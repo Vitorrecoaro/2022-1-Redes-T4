@@ -1,3 +1,12 @@
+# 2022 - 1 - UFSCar - Departamento de Computação..
+# Trabalho de Redes 2 - Camada de transporte TCP.
+# Alunos:.
+# Bruno Leandro Pereira - RA: 791067.
+# Bruno Luis Rodrigues Medri - RA: 790004.
+# Thiago Roberto Albino - RA: 790034.
+# Vitor de Almeida Recoaro - RA: 790035.
+
+
 class CamadaEnlace:
     ignore_checksum = False
 
@@ -43,23 +52,54 @@ class Enlace:
     def __init__(self, linha_serial):
         self.linha_serial = linha_serial
         self.linha_serial.registrar_recebedor(self.__raw_recv)
+        self.resto = b""
 
     def registrar_recebedor(self, callback):
         self.callback = callback
 
     def enviar(self, datagrama):
-        # TODO: Preencha aqui com o código para enviar o datagrama pela linha
-        # serial, fazendo corretamente a delimitação de quadros e o escape de
-        # sequências especiais, de acordo com o protocolo CamadaEnlace (RFC 1055).
-        datagrama = b'\xc0' + datagrama + b'\xc0'
-        self.linha_serial.enviar( datagrama)
+        datagramaParaEnviar = b""
+
+        for byte in datagrama:
+            if byte == 0xC0:
+                datagramaParaEnviar += b"\xdb" + b"\xdc"
+
+            elif byte == 0xDB:
+                datagramaParaEnviar += b"\xdb" + b"\xdd"
+
+            else:
+                datagramaParaEnviar += bytes([byte])
+
+        datagramaParaEnviar = b"\xc0" + datagramaParaEnviar + b"\xc0"
+        self.linha_serial.enviar(datagramaParaEnviar)
 
     def __raw_recv(self, dados):
-        # TODO: Preencha aqui com o código para receber dados da linha serial.
-        # Trate corretamente as sequências de escape. Quando ler um quadro
-        # completo, repasse o datagrama contido nesse quadro para a camada
-        # superior chamando self.callback. Cuidado pois o argumento dados pode
-        # vir quebrado de várias formas diferentes - por exemplo, podem vir
-        # apenas pedaços de um quadro, ou um pedaço de quadro seguido de um
-        # pedaço de outro, ou vários quadros de uma vez só.
-        pass
+        # Pega o resto que pode ter sido recebido nos dados anteriores.
+        datagrama = self.resto
+
+        for byte in dados:
+
+            if byte == 0xC0 and datagrama != b"":
+
+                try:
+                    self.callback(datagrama)
+                except:
+                    import traceback
+
+                    traceback.print_exc()
+                finally:
+                    # faça aqui a limpeza necessária para garantir que não vão sobrar
+                    # pedaços do datagrama em nenhum buffer mantido por você
+                    datagrama = b""
+                    self.resto = b""
+
+            elif byte != 0xC0:
+                datagrama += bytes([byte])
+
+                if datagrama[-2:] == b"\xdb\xdc":
+                    datagrama = datagrama[:-2] + b"\xc0"
+
+                elif datagrama[-2:] == b"\xdb\xdd":
+                    datagrama = datagrama[:-2] + b"\xdb"
+
+        self.resto = datagrama
